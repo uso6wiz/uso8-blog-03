@@ -1,0 +1,66 @@
+# -----------------------------------------------------------------------------
+# uso8-blog-03 push → ECR push → ECS 強制デプロイ
+# 事前: tf-aws service で ECR / ECS を apply し、
+#       GitHub Secrets に AWS_ROLE_ARN（github-actions-blog-deploy の ARN）を登録すること
+# -----------------------------------------------------------------------------
+
+name: deploy-ecs
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "src/**"
+      - "Dockerfile"
+      - "build.gradle"
+      - "settings.gradle"
+      - ".github/workflows/deploy-ecs.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY: wiz-dev-app
+  ECS_CLUSTER: wiz-dev-ecs
+  ECS_SERVICE: wiz-dev-app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Account ID
+        id: account
+        run: |
+          echo "id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+
+      - name: ECR login
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin ${{ steps.account.outputs.id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+      - name: Build & push
+        run: |
+          IMAGE_URI=${{ steps.account.outputs.id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}
+          docker build -t $IMAGE_URI:${{ github.sha }} -t $IMAGE_URI:latest .
+          docker push $IMAGE_URI:${{ github.sha }}
+          docker push $IMAGE_URI:latest
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+
+      - name: ECS force new deployment
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
