@@ -33,6 +33,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # デバッグ用: OIDC の sub は repo:${{ github.repository }}:ref:${{ github.ref }} 等。
+      # Trust と合わせるには Terraform の github_org_repo_blog = "${{ github.repository }}" かつ
+      # AWS_ROLE_ARN = github-actions-blog-deploy の ARN にすること。
+      - name: OIDC debug
+        run: |
+          echo "repository=${{ github.repository }}"
+          echo "ref=${{ github.ref }}"
+          echo "::notice::Trust 用 org/repo は ${{ github.repository }} に合わせ、AWS_ROLE_ARN は github-actions-blog-deploy の ARN にすること"
+
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
