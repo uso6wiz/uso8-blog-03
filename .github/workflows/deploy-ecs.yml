@@ -9,12 +9,8 @@ name: deploy-ecs
 on:
   push:
     branches: ["main"]
-    paths:
-      - "src/**"
-      - "Dockerfile"
-      - "build.gradle"
-      - "settings.gradle"
-      - ".github/workflows/deploy-ecs.yml"
+  # paths を付けると空コミット（ファイル差分なし）では起動しない。手動再実行用。
+  workflow_dispatch:
 
 permissions:
   id-token: write
